@@ -74,21 +74,39 @@ BB_STD = 2.0
 
 @st.cache_data(ttl=3600)
 def fetch_history_cached(symbol, timeframe):
-    # --- HISTORICAL FIX: Load only last 1 year for performance ---
-    end_time = datetime.now()
-    start_time = end_time - timedelta(days=365) # Fetch last 1 year of daily data
-    since_ms = int(start_time.timestamp() * 1000)
+    # --- FIX: REMOVING THE 1-YEAR LIMIT (Allows max history from 2017) ---
     
     try:
-        # Use Kraken for historical data too
+        # Use Kraken for historical data
         exchange = ccxt.kraken({'enableRateLimit': True})
-        candles = exchange.fetch_ohlcv(symbol, timeframe, since=since_ms, limit=366)
-        df = pd.DataFrame(candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        
+        # We start fetching from Kraken's earliest available date (approx 2017)
+        since_ms = exchange.parse8601('2017-01-01T00:00:00Z') 
+        
+        all_candles = []
+        while True:
+            # Fetch data in batches of 1000
+            candles = exchange.fetch_ohlcv(symbol, timeframe, since=since_ms, limit=1000)
+            if not candles:
+                break
+            
+            all_candles.extend(candles)
+            
+            # Update 'since' to the last timestamp found + 1ms to get next batch
+            since_ms = candles[-1][0] + 1
+            
+            # If we fetched less than the limit, we're done
+            if len(candles) < 1000:
+                break
+            time.sleep(0.1) # Small pause to avoid rate limits
+            
+        df = pd.DataFrame(all_candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         return df
+    
     except Exception as e:
         # Fallback for charts if Kraken fails (shows clean line)
-        dates = pd.date_range(start=start_time, end=end_time, periods=200)
+        dates = pd.date_range(end=datetime.now(), periods=200, freq='D')
         df = pd.DataFrame({'timestamp': dates})
         df['close'] = [60000 + (i * random.uniform(-50, 50)) for i in range(len(dates))]
         df['open'] = df['close'] * random.uniform(0.99, 1.01)
