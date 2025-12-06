@@ -11,7 +11,19 @@ from datetime import datetime
 # -------------------------------------------
 # 1. PAGE CONFIGURATION
 # -------------------------------------------
-st.set_page_config(page_title="Coinify", layout="wide", page_icon="⚡")
+config = {
+    "mode": "backtest",
+    "use_mock_data": False,
+    "symbol": "BTC/USDT",
+    "trade_amount": 100,
+    "stop_loss_pct": 0.02,
+    "take_profit_pct": 0.04,
+    "ema_fast": 9,
+    "ema_slow": 21,
+    "rsi_period": 14,
+    "rsi_overbought": 70,
+    "rsi_oversold": 30,
+}
 
 if 'selected_asset' not in st.session_state:
     st.session_state.selected_asset = None
