@@ -206,25 +206,44 @@ else:
     asset = st.session_state.selected_asset
     st.header(f"{asset} Analysis")
     tab1, tab2 = st.tabs(["📊 Technicals", "🕯️ TradingView"])
+  # --- TAB 1: PYTHON ANALYZER (FINAL OPTIMIZED CHART) ---
     with tab1:
-        with st.spinner("Loading History..."):
-            df = fetch_history_cached(asset, DEFAULT_TIMEFRAME)
-            df = calculate_bands(df, BB_PERIOD, BB_STD)
-            last = df.iloc[-1]
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Current Price", f"${last['close']:,.2f}")
-            m2.metric("All Time High", f"${df['high'].max():,.2f}")
-            if last['close'] < last['lower']: m3.metric("Bot Signal", "BUY ZONE", "Oversold")
-            elif last['close'] > last['upper']: m3.metric("Bot Signal", "SELL ZONE", "Overbought")
-            else: m3.metric("Bot Signal", "NEUTRAL", "Hold")
+        st.subheader(f"{asset} // Algorithmic Analysis")
+        try:
+            with st.spinner(f'Crunching {asset} data...'):
+                # This fetches ALL available data (since ~2017)
+                df = fetch_history_cached(asset, DEFAULT_TIMEFRAME)
+                df = calculate_bands(df, BB_PERIOD, BB_STD)
 
+            # CRITICAL FIX: Set Default View to Last 3 Years for clear scaling
+            end_date = datetime.now()
+            start_date_view = end_date - timedelta(days=1095) # 3 years
+            
+            last_row = df.iloc[-1]
+            
+            # Metrics
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Current Price", f"${last_row['close']:,.2f}")
+            m2.metric("All Time High", f"${df['high'].max():,.2f}") 
+            if last_row['close'] < last_row['lower']:
+                m3.metric("Bot Signal", "🟢 BUY ZONE", "Oversold")
+            else:
+                m3.metric("Bot Signal", "💤 NEUTRAL", "Hold")
+
+            # Plotly Chart (Uses full DF but sets initial zoom range)
             fig = go.Figure()
             fig.add_trace(go.Candlestick(x=df['timestamp'], open=df['open'], high=df['high'], low=df['low'], close=df['close'], name='Price'))
             fig.add_trace(go.Scatter(x=df['timestamp'], y=df['upper'], line=dict(color='gray', width=1), name='Upper'))
             fig.add_trace(go.Scatter(x=df['timestamp'], y=df['lower'], line=dict(color='gray', width=1), name='Lower'))
             fig.add_trace(go.Scatter(x=df['timestamp'], y=df['middle'], line=dict(color='orange', width=1), name='Avg'))
-            fig.update_layout(height=500, template="plotly_dark", xaxis_rangeslider_visible=True)
+            
+            # Set the initial view range to the last 3 years
+            fig.update_xaxes(range=[start_date_view, end_date], rangeslider_visible=True, type='date')
+            fig.update_layout(height=500, template="plotly_dark", title=f"{asset} Full History (3-Year View)")
             st.plotly_chart(fig, use_container_width=True)
+
+        except Exception as e:
+            st.error(f"Error loading chart: {e}") 
     with tab2:
         tv_symbol = f"KRAKEN:{asset.replace('/USDT', 'USD')}" # Adjusted symbol for Kraken in TradingView
         components.html(f"""
