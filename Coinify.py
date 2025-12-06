@@ -74,13 +74,12 @@ BB_STD = 2.0
 
 @st.cache_data(ttl=3600)
 def fetch_history_cached(symbol, timeframe):
-    # --- FIX: REMOVING THE 1-YEAR LIMIT (Allows max history from 2017) ---
+    # --- FIX: RESTORED FULL HISTORY FETCHING (Paginates back to 2017) ---
     
     try:
-        # Use Kraken for historical data
         exchange = ccxt.kraken({'enableRateLimit': True})
         
-        # We start fetching from Kraken's earliest available date (approx 2017)
+        # Start fetching from Kraken's earliest available date (approx 2017)
         since_ms = exchange.parse8601('2017-01-01T00:00:00Z') 
         
         all_candles = []
@@ -98,14 +97,14 @@ def fetch_history_cached(symbol, timeframe):
             # If we fetched less than the limit, we're done
             if len(candles) < 1000:
                 break
-            time.sleep(0.1) # Small pause to avoid rate limits
+            time.sleep(0.1) 
             
         df = pd.DataFrame(all_candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         return df
     
     except Exception as e:
-        # Fallback for charts if Kraken fails (shows clean line)
+        # Fallback ensures the chart is never blank
         dates = pd.date_range(end=datetime.now(), periods=200, freq='D')
         df = pd.DataFrame({'timestamp': dates})
         df['close'] = [60000 + (i * random.uniform(-50, 50)) for i in range(len(dates))]
