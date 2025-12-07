@@ -4,199 +4,185 @@ import ccxt
 import pandas as pd
 import plotly.graph_objects as go
 import time
-import os
-import random 
+import random
 from datetime import datetime, timedelta
 
-# -------------------------------------------
-# 1. PAGE CONFIGURATION
-# -------------------------------------------
+# -------------------------------------------------------
+# PAGE CONFIG
+# -------------------------------------------------------
 st.set_page_config(page_title="Coinify", layout="wide", page_icon="⚡")
 
-if 'selected_asset' not in st.session_state:
+if "selected_asset" not in st.session_state:
     st.session_state.selected_asset = None
 
-# -------------------------------------------
-# 2. DATA ENGINE (CLOUD SAFE VERSION)
-# -------------------------------------------
+# -------------------------------------------------------
+# MARKET DATA
+# -------------------------------------------------------
 @st.cache_data(ttl=60)
 def get_market_data():
-    # --- LIVE PRICE FIX: Use Kraken (Cloud-friendly exchange) ---
     try:
-        exchange = ccxt.kraken() # Switching from blocked Binance to Kraken
-        symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT', 'DOGE/USDT', 'ADA/USDT', 'AVAX/USDT']
-        # Kraken symbols are slightly different
-        kraken_symbols = [s.replace('USDT', 'USD') for s in symbols] 
+        exchange = ccxt.kraken()
+        symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT",
+                   "XRP/USDT", "DOGE/USDT", "ADA/USDT", "AVAX/USDT"]
+
+        kraken_symbols = [s.replace("USDT", "USD") for s in symbols]
         tickers = exchange.fetch_tickers(kraken_symbols)
-        
+
         data = []
         rank = 1
         for symbol, ticker in tickers.items():
-            name = symbol.split('/')[0]
+            name = symbol.split("/")[0]
             data.append({
-                "Rank": rank, "Symbol": symbol, "Name": name,
-                "Price": ticker['last'], "Change": ticker['percentage'],
-                "Volume": ticker['quoteVolume'], 
-                "MarketCap": ticker['quoteVolume'] * random.uniform(20, 50),
-                "Logo": f"https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/128/color/{name.lower()}.png", 
+                "Rank": rank,
+                "Symbol": symbol,
+                "Name": name,
+                "Price": ticker["last"],
+                "Change": ticker["percentage"],
+                "Volume": ticker["quoteVolume"],
+                "MarketCap": ticker["quoteVolume"] * random.uniform(20, 50),
+                "Logo": f"https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/128/color/{name.lower()}.png",
                 "Sparkline": f"https://www.coingecko.com/coins/{rank}/sparkline.svg"
             })
             rank += 1
+
         return pd.DataFrame(data)
-    
-    # 2. Fallback to Demo Data (If Kraken also fails)
-    except Exception as e:
-        # Fallback ensures the site is never blank for recruiters
+
+    except:
         data = []
         mock_coins = [
-            ("BTC/USDT", 67000), ("ETH/USDT", 2500), ("SOL/USDT", 140), ("BNB/USDT", 600),
-            ("XRP/USDT", 0.60), ("DOGE/USDT", 0.15), ("ADA/USDT", 0.45), ("AVAX/USDT", 35)
+            ("BTC/USDT", 67000), ("ETH/USDT", 2500), ("SOL/USDT", 140),
+            ("BNB/USDT", 600), ("XRP/USDT", 0.60), ("DOGE/USDT", 0.15),
+            ("ADA/USDT", 0.45), ("AVAX/USDT", 35)
         ]
+
         rank = 1
         for symbol, price in mock_coins:
-            name = symbol.split('/')[0]
+            name = symbol.split("/")[0]
             price = price * random.uniform(0.98, 1.02)
             change = random.uniform(-5, 5)
             data.append({
-                "Rank": rank, "Symbol": symbol, "Name": name,
-                "Price": price, "Change": change,
-                "Volume": random.uniform(1000000, 1000000000), 
-                "MarketCap": random.uniform(1000000000, 50000000000),
-                "Logo": f"https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/128/color/{name.lower()}.png", 
+                "Rank": rank,
+                "Symbol": symbol,
+                "Name": name,
+                "Price": price,
+                "Change": change,
+                "Volume": random.uniform(1e6, 1e9),
+                "MarketCap": random.uniform(1e9, 5e10),
+                "Logo": f"https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/128/color/{name.lower()}.png",
                 "Sparkline": f"https://www.coingecko.com/coins/{rank}/sparkline.svg"
             })
             rank += 1
+
         return pd.DataFrame(data)
 
-DEFAULT_TIMEFRAME = "1d"
-BB_PERIOD = 20
-BB_STD = 2.0
 
+# -------------------------------------------------------
+# PRICE HISTORY
+# -------------------------------------------------------
 @st.cache_data(ttl=3600)
-def fetch_history_cached(symbol, timeframe):
-    # --- FIX: RESTORED FULL HISTORY FETCHING (Paginates back to 2017) ---
-    
+def fetch_history(symbol, timeframe):
     try:
-        exchange = ccxt.kraken({'enableRateLimit': True})
-        
-        # Start fetching from Kraken's earliest available date (approx 2017)
-        since_ms = exchange.parse8601('2017-01-01T00:00:00Z') 
-        
+        exchange = ccxt.kraken({"enableRateLimit": True})
+        kraken_symbol = symbol.replace("USDT", "USD")
+
+        since_ms = exchange.parse8601("2017-01-01T00:00:00Z")
         all_candles = []
+
         while True:
-            # Fetch data in batches of 1000
-            candles = exchange.fetch_ohlcv(symbol, timeframe, since=since_ms, limit=1000)
+            candles = exchange.fetch_ohlcv(kraken_symbol, timeframe, since=since_ms, limit=1000)
             if not candles:
                 break
-            
+
             all_candles.extend(candles)
-            
-            # Update 'since' to the last timestamp found + 1ms to get next batch
             since_ms = candles[-1][0] + 1
-            
-            # If we fetched less than the limit, we're done
             if len(candles) < 1000:
                 break
-            time.sleep(0.1) 
-            
-        df = pd.DataFrame(all_candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        return df
-    
-    except Exception as e:
-        # Fallback ensures the chart is never blank
-        dates = pd.date_range(end=datetime.now(), periods=200, freq='D')
-        df = pd.DataFrame({'timestamp': dates})
-        df['close'] = [60000 + (i * random.uniform(-50, 50)) for i in range(len(dates))]
-        df['open'] = df['close'] * random.uniform(0.99, 1.01)
-        df['high'] = df['close'] * 1.05
-        df['low'] = df['close'] * 0.95
+            time.sleep(0.1)
+
+        df = pd.DataFrame(all_candles, columns=["timestamp", "open", "high", "low", "close", "volume"])
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         return df
 
-def add_indicators(df, period, std):
-    # --- 1. Bollinger Bands (BB) - Volatility ---
-    df['middle'] = df['close'].rolling(window=period).mean()
-    std_dev = df['close'].rolling(window=period).std()
-    df['upper'] = df['middle'] + (std_dev * std)
-    df['lower'] = df['middle'] - (std_dev * std)
+    except:
+        dates = pd.date_range(end=datetime.now(), periods=200, freq="D")
+        df = pd.DataFrame({"timestamp": dates})
+        df["close"] = [60000 + (i * random.uniform(-50, 50)) for i in range(len(dates))]
+        df["open"] = df["close"] * random.uniform(0.99, 1.01)
+        df["high"] = df["close"] * 1.05
+        df["low"] = df["close"] * 0.95
+        df["volume"] = random.uniform(1e3, 1e6)
+        return df
 
-    # --- 2. Relative Strength Index (RSI) - Momentum ---
-    delta = df['close'].diff()
+
+# -------------------------------------------------------
+# INDICATORS
+# -------------------------------------------------------
+def add_indicators(df, period=20, std=2.0):
+    df["middle"] = df["close"].rolling(period).mean()
+    df["upper"] = df["middle"] + df["close"].rolling(period).std() * std
+    df["lower"] = df["middle"] - df["close"].rolling(period).std() * std
+
+    delta = df["close"].diff()
     gain = delta.where(delta > 0, 0)
     loss = -delta.where(delta < 0, 0)
-    # Exponentially weighted smoothing for the Average Gain/Loss
-    avg_gain = gain.ewm(com=14-1, adjust=False).mean() 
-    avg_loss = loss.ewm(com=14-1, adjust=False).mean()
+    avg_gain = gain.ewm(com=13, adjust=False).mean()
+    avg_loss = loss.ewm(com=13, adjust=False).mean()
     rs = avg_gain / avg_loss
-    df['RSI'] = 100 - (100 / (1 + rs)) 
-    
-    # --- 3. MACD - Trend Following Momentum ---
-    df['EMA12'] = df['close'].ewm(span=12, adjust=False).mean()
-    df['EMA26'] = df['close'].ewm(span=26, adjust=False).mean()
-    df['MACD'] = df['EMA12'] - df['EMA26'] # MACD Line
-    df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean() # Signal Line
-    
-    # --- 4. Simple Moving Average (SMA) - Trend Filter ---
-    df['SMA200'] = df['close'].rolling(window=200).mean() 
-    
-    # Drop rows with NaN values created by rolling/ewm calculation for clean signals
+    df["RSI"] = 100 - (100 / (1 + rs))
+
+    df["EMA12"] = df["close"].ewm(span=12, adjust=False).mean()
+    df["EMA26"] = df["close"].ewm(span=26, adjust=False).mean()
+    df["MACD"] = df["EMA12"] - df["EMA26"]
+    df["Signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
+
+    df["SMA200"] = df["close"].rolling(200).mean()
+
     df = df.dropna()
     return df
 
-def create_indicator_status_table(last_row):
-    """Creates a DataFrame showing the current status of each indicator."""
-    
-    # 1. Define the status for each indicator based on the last row of data
-    
-    # Bollinger Bands
-    if last_row['close'] < last_row['lower']:
-        bb_status = "Oversold (BUY)"
-    elif last_row['close'] > last_row['upper']:
-        bb_status = "Overbought (SELL)"
-    else:
-        bb_status = "Neutral"
 
-    # RSI
-    if last_row['RSI'] < 30:
-        rsi_status = "Oversold (BUY)"
-    elif last_row['RSI'] > 70:
-        rsi_status = "Overbought (SELL)"
+# -------------------------------------------------------
+# INDICATOR STATUS TABLE
+# -------------------------------------------------------
+def create_indicator_status_table(last):
+    if last["close"] < last["lower"]:
+        bb = "Oversold (BUY)"
+    elif last["close"] > last["upper"]:
+        bb = "Overbought (SELL)"
     else:
-        rsi_status = "Neutral"
-        
-    # MACD
-    if last_row['MACD'] > last_row['Signal']:
-        macd_status = "Bullish Cross (BUY)"
-    elif last_row['MACD'] < last_row['Signal']:
-        macd_status = "Bearish Cross (SELL)"
-    else:
-        macd_status = "Neutral"
+        bb = "Neutral"
 
-    # SMA200
-    if last_row['close'] > last_row['SMA200']:
-        sma_status = "Uptrend (BUY)"
+    if last["RSI"] < 30:
+        rsi = "Oversold (BUY)"
+    elif last["RSI"] > 70:
+        rsi = "Overbought (SELL)"
     else:
-        sma_status = "Downtrend (SELL)"
-        
-    # 2. Compile the status into a DataFrame
-    data = {
-        'Indicator': ['BBands', 'RSI', 'MACD', 'SMA200'],
-        'Value': [
-            f"Close vs. Lower: {last_row['lower']:.2f}",
-            f"{last_row['RSI']:.2f}",
-            f"MACD vs. Signal: {macd_status}",
-            f"Close vs. SMA200: {last_row['SMA200']:.2f}"
+        rsi = "Neutral"
+
+    if last["MACD"] > last["Signal"]:
+        macd = "Bullish Cross (BUY)"
+    else:
+        macd = "Bearish Cross (SELL)"
+
+    sma = "Uptrend (BUY)" if last["close"] > last["SMA200"] else "Downtrend (SELL)"
+
+    return pd.DataFrame({
+        "Indicator": ["BBands", "RSI", "MACD", "SMA200"],
+        "Value": [
+            f"Close vs Lower: {last['lower']:.2f}",
+            f"{last['RSI']:.2f}",
+            f"MACD vs Signal",
+            f"SMA200: {last['SMA200']:.2f}"
         ],
-        'Signal': [bb_status, rsi_status, macd_status, sma_status]
-    }
-    
-    return pd.DataFrame(data)
+        "Signal": [bb, rsi, macd, sma]
+    })
 
-# -------------------------------------------
-# 3. APP NAVIGATION
-# -------------------------------------------
+
+# -------------------------------------------------------
+# MAIN UI
+# -------------------------------------------------------
 if st.session_state.selected_asset is None:
-    # BRANDING HEADER
+
     col_logo, col_title = st.columns([1, 10])
     with col_logo:
         st.image("https://cdn-icons-png.flaticon.com/512/217/217853.png", width=70)
@@ -208,127 +194,155 @@ if st.session_state.selected_asset is None:
         df = get_market_data()
 
     if not df.empty:
-        # Highlights
-        top_gainer = df.loc[df['Change'].idxmax()]
-        top_loser = df.loc[df['Change'].idxmin()]
-        btc_rows = df.loc[df['Name'] == 'BTC']
-        btc_data = btc_rows.iloc[0] if not btc_rows.empty else df.iloc[0]
+
+        top_gainer = df.loc[df["Change"].idxmax()]
+        top_loser = df.loc[df["Change"].idxmin()]
+        btc_data = df[df["Name"] == "BTC"].iloc[0] if "BTC" in df["Name"].values else df.iloc[0]
 
         m1, m2, m3 = st.columns(3)
         with m1:
-            with st.container(border=True):
-                st.caption("🚀 Top Gainer")
-                c_head, c_metric = st.columns([1, 2])
-                c_head.image(top_gainer['Logo'], width=50)
-                st.image(top_gainer['Sparkline'], use_container_width=True)
+            st.caption("🚀 Top Gainer")
+            st.image(top_gainer["Logo"], width=50)
+            st.image(top_gainer["Sparkline"])
+
         with m2:
-            with st.container(border=True):
-                st.caption("📉 Top Loser")
-                c_head, c_metric = st.columns([1, 2])
-                c_head.image(top_loser['Logo'], width=50)
-                c_metric.metric(top_loser['Name'], f"${top_loser['Price']:,.2f}", f"{top_loser['Change']:.2f}%")
-                st.image(top_loser['Sparkline'], use_container_width=True)
+            st.caption("📉 Top Loser")
+            st.image(top_loser["Logo"], width=50)
+            st.metric(top_loser["Name"], f"${top_loser['Price']:,.2f}", f"{top_loser['Change']:.2f}%")
+            st.image(top_loser["Sparkline"])
+
         with m3:
-            with st.container(border=True):
-                st.caption("💰 Market Leader")
-                c_head, c_metric = st.columns([1, 2])
-                c_head.image(btc_data['Logo'], width=50)
-                c_metric.metric(btc_data['Name'], f"${btc_data['Price']:,.2f}", f"{btc_data['Change']:.2f}%")
-                st.image(btc_data['Sparkline'], use_container_width=True)
+            st.caption("💰 Market Leader")
+            st.image(btc_data["Logo"], width=50)
+            st.metric(btc_data["Name"], f"${btc_data['Price']:,.2f}", f"{btc_data['Change']:.2f}%")
+            st.image(btc_data["Sparkline"])
 
-        st.write("") 
+        st.write("")
 
-        # TABLE
         h_cols = st.columns([0.4, 1.8, 1.2, 1.0, 1.5, 1.5, 1.5])
-        h_cols[0].markdown("##### #")
-        h_cols[1].markdown("##### Coin")
-        h_cols[2].markdown("##### Price")
-        h_cols[3].markdown("##### 24h")
-        h_cols[4].markdown("##### Volume")
-        h_cols[5].markdown("##### Mkt Cap")
-        h_cols[6].markdown("##### Trend (7d)")
+        headers = ["#", "Coin", "Price", "24h", "Volume", "Mkt Cap", "Trend"]
+        for i, h in enumerate(headers):
+            h_cols[i].markdown(f"##### {h}")
         st.divider()
 
-        for index, row in df.iterrows():
+        for _, row in df.iterrows():
             cols = st.columns([0.4, 1.8, 1.2, 1.0, 1.5, 1.5, 1.5])
             cols[0].write(f"**{row['Rank']}**")
+
             with cols[1]:
-                c_img, c_txt = st.columns([0.5, 1.5])
-                c_img.image(row['Logo'], width=50)
-                c_txt.markdown(f"**{row['Name']}**\n<span style='color:gray;font-size:0.8em'>{row['Symbol'].split('/')[0]}</span>", unsafe_allow_html=True)
+                c1, c2 = st.columns([0.5, 1.5])
+                c1.image(row["Logo"], width=50)
+                c2.markdown(f"**{row['Name']}**<br><span style='color:gray;font-size:0.8em'>{row['Symbol'].split('/')[0]}</span>",
+                            unsafe_allow_html=True)
+
             cols[2].write(f"${row['Price']:,.2f}")
-            color = "green" if row['Change'] > 0 else "red"
+
+            color = "green" if row["Change"] > 0 else "red"
             cols[3].markdown(f":{color}[{row['Change']:.2f}%]")
-            vol_str = f"${row['Volume']/1_000_000_000:.2f}B" if row['Volume'] > 1_000_000_000 else f"${row['Volume']/1_000_000:.2f}M"
+
+            vol = row["Volume"]
+            vol_str = f"${vol/1e9:.2f}B" if vol > 1e9 else f"${vol/1e6:.2f}M"
             cols[4].write(vol_str)
-            cap_str = f"${row['MarketCap']/1_000_000_000:.2f}B"
-            cols[5].write(cap_str)
-            with cols[6]:
-                sc1, sc2 = st.columns([3, 1])
-                sc1.image(row['Sparkline'])
-                if sc2.button("🔎", key=row['Symbol'], help=f"Analyze {row['Name']}"):
-                    st.session_state.selected_asset = row['Symbol']
-                    st.rerun()
+
+            cap = row["MarketCap"]
+            cols[5].write(f"${cap/1e9:.2f}B")
+
+            if cols[6].button("🔎", key=row["Symbol"]):
+                st.session_state.selected_asset = row["Symbol"]
+                st.rerun()
+
             st.markdown("---")
 
-else:
-    # --- FIX 1: Initialize df and historical data fetch ---
-    # This ensures 'df' is always available when the Technicals tab loads.
-    df = pd.DataFrame() 
 
+else:
     if st.button("⬅️ Back to Coinify Market"):
         st.session_state.selected_asset = None
         st.rerun()
+
     asset = st.session_state.selected_asset
     st.header(f"{asset} Analysis")
+
     tab1, tab2 = st.tabs(["📊 Technicals", "🕯️ TradingView"])
-    
-    # --- FIX 2: Fetch data here, outside of the try block, so the variable is global ---
-    try:
-        df = fetch_history_cached(asset, DEFAULT_TIMEFRAME) 
-    except Exception as e:
-        # If the fetch fails, df remains an empty DataFrame, preventing the crash.
-        st.error(f"Failed to fetch historical data: {e}. Displaying limited view.")
-        
-    # -------------------------------------------
-    # TAB 1: PYTHON ANALYZER
-    # -------------------------------------------
+
+    # ---------------------------------------------------
+    # TAB 1 – Python Analyzer
+    # ---------------------------------------------------
     with tab1:
-        st.subheader(f"{asset} // Algorithmic Analysis")
+        try:
+            with st.spinner("Loading History..."):
+                df = fetch_history(asset, "1d")
+                df = add_indicators(df)
 
-        # Now, only proceed with indicators/chart if the fetch was successful
-        if not df.empty:
-            
-            with st.spinner("Calculating Indicators..."):
-                # Calculate indicators and get the last row
-                df = add_indicators(df, BB_PERIOD, BB_STD) 
-            
-            # The rest of your metrics and chart logic goes here...
-            
-            # --- Continue with your Metric, Signal, and Chart code here ---
-            # ... (The rest of your extensive tab1 code should follow here) ...
+            last = df.iloc[-1]
 
-        else:
-            st.warning("Historical chart data is unavailable.")
-    
-    # -------------------------------------------
-    # TAB 2: TRADINGVIEW WIDGET
-    # -------------------------------------------
+            bb_buy = last["close"] < last["lower"]
+            rsi_buy = last["RSI"] < 30
+            macd_buy = last["MACD"] > last["Signal"]
+            sma_buy = last["close"] > last["SMA200"]
+
+            score = sum([bb_buy, rsi_buy, macd_buy, sma_buy])
+
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Current Price", f"${last['close']:,.2f}")
+            m2.metric("All Time High", f"${df['high'].max():,.2f}")
+
+            if score >= 3:
+                m3.metric("Bot Signal", "🔥 STRONG BUY", "High Confluence")
+            elif last["close"] > last["upper"] and last["RSI"] > 70:
+                m3.metric("Bot Signal", "🔴 SELL ZONE", "Overbought")
+            else:
+                m3.metric("Bot Signal", "💤 NEUTRAL", "Hold")
+
+            start_view = df["timestamp"].iloc[-365]
+            end_view = df["timestamp"].iloc[-1]
+
+            fig = go.Figure()
+            fig.add_trace(go.Candlestick(
+                x=df["timestamp"],
+                open=df["open"], high=df["high"],
+                low=df["low"], close=df["close"],
+                name="Price"
+            ))
+
+            fig.add_trace(go.Scatter(x=df["timestamp"], y=df["upper"], line=dict(color="gray", width=1), name="Upper"))
+            fig.add_trace(go.Scatter(x=df["timestamp"], y=df["lower"], line=dict(color="gray", width=1), name="Lower"))
+            fig.add_trace(go.Scatter(x=df["timestamp"], y=df["middle"], line=dict(color="orange", width=1), name="Middle"))
+
+            fig.update_xaxes(range=[start_view, end_view], rangeslider_visible=True, type="date")
+            fig.update_layout(height=500, template="plotly_dark", title=f"{asset} – 3 Year View")
+
+            st.plotly_chart(fig, use_container_width=True)
+
+            st.markdown("---")
+            st.subheader("🔎 Indicator Confluence Breakdown")
+
+            st.dataframe(create_indicator_status_table(last), use_container_width=True, hide_index=True)
+
+        except Exception as e:
+            st.error(f"Error loading chart: {e}")
+
+    # ---------------------------------------------------
+    # TAB 2 – TradingView Widget
+    # ---------------------------------------------------
     with tab2:
-        # ... (TradingView code is correct and left here) ...
-    # -------------------------------------------
-    # TAB 2: TRADINGVIEW WIDGET
-    # -------------------------------------------
-    
-
-     
-     with tab2:
-        tv_symbol = f"KRAKEN:{asset.replace('/USDT', 'USD')}" # Adjusted symbol for Kraken in TradingView
+        tv_symbol = f"KRAKEN:{asset.replace('/USDT', 'USD')}"
         components.html(f"""
         <div class="tradingview-widget-container" style="height:100%;width:100%">
           <div class="tradingview-widget-container__widget" style="height:calc(100% - 32px);width:100%"></div>
           <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
-          {{"width": "100%", "height": "600", "symbol": "{tv_symbol}", "interval": "D", "timezone": "Etc/UTC", "theme": "dark", "style": "1", "locale": "en", "enable_publishing": false, "allow_symbol_change": true, "support_host": "https://www.tradingview.com"}}
+          {{
+            "width": "100%",
+            "height": "600",
+            "symbol": "{tv_symbol}",
+            "interval": "D",
+            "timezone": "Etc/UTC",
+            "theme": "dark",
+            "style": "1",
+            "locale": "en",
+            "enable_publishing": false,
+            "allow_symbol_change": true,
+            "support_host": "https://www.tradingview.com"
+          }}
           </script>
         </div>
         """, height=600)
