@@ -142,22 +142,24 @@ def fetch_history_cached(symbol, timeframe):
                 break
             time.sleep(0.1) 
         
-        # If no data was fetched, return an empty DataFrame (not a list)
+        # 1. CRITICAL CHECK: If no data was fetched (empty list), return an empty DataFrame.
         if not all_candles:
-            return pd.DataFrame() 
+            # Return an empty DataFrame with the expected column names
+            return pd.DataFrame(columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             
         df = pd.DataFrame(all_candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         return df
     
     except Exception as e:
-        # Fallback ensures the chart is never blank, returning a valid DataFrame
+        # 2. FALLBACK: Return a dummy DataFrame with the correct columns to prevent crashing
         dates = pd.date_range(end=datetime.now(), periods=200, freq='D')
         df = pd.DataFrame({'timestamp': dates})
         df['close'] = [60000 + (i * random.uniform(-50, 50)) for i in range(len(dates))]
         df['open'] = df['close'] * random.uniform(0.99, 1.01)
         df['high'] = df['close'] * 1.05
         df['low'] = df['close'] * 0.95
+        # Ensure the fallback returns a DataFrame that can handle the iloc call
         return df
 
 
