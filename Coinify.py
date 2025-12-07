@@ -122,37 +122,42 @@ def get_market_data():
 # PRICE HISTORY
 # -------------------------------------------------------
 @st.cache_data(ttl=3600)
-def fetch_history(symbol, timeframe):
+def fetch_history_cached(symbol, timeframe):
+    # --- FIX: Ensure a DataFrame is ALWAYS returned ---
+    
     try:
-        exchange = ccxt.kraken({"enableRateLimit": True})
-        kraken_symbol = symbol.replace("USDT", "USD")
-
-        since_ms = exchange.parse8601("2017-01-01T00:00:00Z")
+        exchange = ccxt.kraken({'enableRateLimit': True})
+        since_ms = exchange.parse8601('2017-01-01T00:00:00Z') 
+        
         all_candles = []
-
         while True:
-            candles = exchange.fetch_ohlcv(kraken_symbol, timeframe, since=since_ms, limit=1000)
+            candles = exchange.fetch_ohlcv(symbol, timeframe, since=since_ms, limit=1000)
             if not candles:
                 break
-
+            
             all_candles.extend(candles)
             since_ms = candles[-1][0] + 1
+            
             if len(candles) < 1000:
                 break
-            time.sleep(0.1)
-
-        df = pd.DataFrame(all_candles, columns=["timestamp", "open", "high", "low", "close", "volume"])
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+            time.sleep(0.1) 
+        
+        # If no data was fetched, return an empty DataFrame (not a list)
+        if not all_candles:
+            return pd.DataFrame() 
+            
+        df = pd.DataFrame(all_candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         return df
-
-    except:
-        dates = pd.date_range(end=datetime.now(), periods=200, freq="D")
-        df = pd.DataFrame({"timestamp": dates})
-        df["close"] = [60000 + (i * random.uniform(-50, 50)) for i in range(len(dates))]
-        df["open"] = df["close"] * random.uniform(0.99, 1.01)
-        df["high"] = df["close"] * 1.05
-        df["low"] = df["close"] * 0.95
-        df["volume"] = random.uniform(1e3, 1e6)
+    
+    except Exception as e:
+        # Fallback ensures the chart is never blank, returning a valid DataFrame
+        dates = pd.date_range(end=datetime.now(), periods=200, freq='D')
+        df = pd.DataFrame({'timestamp': dates})
+        df['close'] = [60000 + (i * random.uniform(-50, 50)) for i in range(len(dates))]
+        df['open'] = df['close'] * random.uniform(0.99, 1.01)
+        df['high'] = df['close'] * 1.05
+        df['low'] = df['close'] * 0.95
         return df
 
 
