@@ -283,6 +283,10 @@ else:
     # TAB 1: PYTHON ANALYZER (FINAL STRUCTURE FIX)
     # -------------------------------------------
     with tab1:
+        # --- NEW FIX: Initialize df before the try block ---
+        df = pd.DataFrame() 
+        
+       
         # Start the TRY block for the data loading
         try:
             with st.spinner("Loading History..."):
