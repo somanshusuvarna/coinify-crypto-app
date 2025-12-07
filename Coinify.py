@@ -280,67 +280,71 @@ else:
     st.header(f"{asset} Analysis")
     tab1, tab2 = st.tabs(["📊 Technicals", "🕯️ TradingView"])
     
-    # --- TAB 1: PYTHON ANALYZER (FINAL OPTIMIZED CHART) ---
+   # -------------------------------------------
+    # TAB 1: PYTHON ANALYZER (FINAL STRUCTURE FIX)
+    # -------------------------------------------
     with tab1:
-        # Loading historical data (now filtered to 1 year max in function)
+        # Start the TRY block for the data loading
         try:
             with st.spinner("Loading History..."):
-                # 1. NEW FUNCTION CALL: Now calculates 4 indicators
+                # 1. New Function Call: Now calculates 4 indicators
                 df = add_indicators(df, BB_PERIOD, BB_STD) 
-                last_row = df.iloc[-1]
                 
-                # --- SIGNAL CONFLUENCE LOGIC ---
-                
-                # BB Buy: Price < Lower Band (Extreme Oversold)
-                bb_buy = last_row['close'] < last_row['lower']
-                # RSI Buy: RSI < 30 (Classic Oversold)
-                rsi_buy = last_row['RSI'] < 30
-                # MACD Buy: MACD Line is above Signal Line (Bullish momentum is building)
-                macd_buy = last_row['MACD'] > last_row['Signal']
-                # SMA Buy: Close price is above 200 SMA (Confirms the long-term trend is UP)
-                sma_buy = last_row['close'] > last_row['SMA200']
+            last_row = df.iloc[-1]
+            
+            # --- SIGNAL CONFLUENCE LOGIC ---
+            
+            # BB Buy: Price < Lower Band (Extreme Oversold)
+            bb_buy = last_row['close'] < last_row['lower']
+            # RSI Buy: RSI < 30 (Classic Oversold)
+            rsi_buy = last_row['RSI'] < 30
+            # MACD Buy: MACD Line is above Signal Line (Bullish momentum is building)
+            macd_buy = last_row['MACD'] > last_row['Signal']
+            # SMA Buy: Close price is above 200 SMA (Confirms the long-term trend is UP)
+            sma_buy = last_row['close'] > last_row['SMA200']
 
-                # Total Score for Buy Signal
-                buy_score = sum([bb_buy, rsi_buy, macd_buy, sma_buy])
-                
-                # Metrics
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Current Price", f"${last_row['close']:,.2f}")
-                m2.metric("All Time High", f"${df['high'].max():,.2f}") 
-                
-                # 2. NEW DECISION BLOCK (Requires 3 out of 4 to agree)
-                if buy_score >= 3:
-                    m3.metric("Bot Signal", "🔥 STRONG BUY", "High Confluence")
-                elif last_row['close'] > last_row['upper'] and last_row['RSI'] > 70:
-                    # Less strict SELL signal (BB + RSI Overbought)
-                    m3.metric("Bot Signal", "🔴 SELL ZONE", "Overbought")
-                else:
-                    m3.metric("Bot Signal", "💤 NEUTRAL", "Hold")
-                
-                # Chart drawing logic follows here...
+            # Total Score for Buy Signal
+            buy_score = sum([bb_buy, rsi_buy, macd_buy, sma_buy])
+            
+            # Metrics
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Current Price", f"${last_row['close']:,.2f}")
+            m2.metric("All Time High", f"${df['high'].max():,.2f}") 
+            
+            # 2. Final Decision Block (Requires 3 out of 4 to agree)
+            if buy_score >= 3:
+                m3.metric("Bot Signal", "🔥 STRONG BUY", "High Confluence")
+            elif last_row['close'] > last_row['upper'] and last_row['RSI'] > 70:
+                m3.metric("Bot Signal", "🔴 SELL ZONE", "Overbought")
+            else:
+                m3.metric("Bot Signal", "💤 NEUTRAL", "Hold")
 
-                # Plotly Chart (Uses full DF but sets initial zoom range)
-                fig = go.Figure()
-                fig.add_trace(go.Candlestick(x=df['timestamp'], open=df['open'], high=df['high'], low=df['low'], close=df['close'], name='Price'))
-                fig.add_trace(go.Scatter(x=df['timestamp'], y=df['upper'], line=dict(color='gray', width=1), name='Upper'))
-                fig.add_trace(go.Scatter(x=df['timestamp'], y=df['lower'], line=dict(color='gray', width=1), name='Lower'))
-                fig.add_trace(go.Scatter(x=df['timestamp'], y=df['middle'], line=dict(color='orange', width=1), name='Avg'))
-                
-                # Set the initial view range to the last 3 years
-                end_date = datetime.now()
-                start_date_view = end_date - timedelta(days=1095) # 3 years
-                fig.update_xaxes(range=[start_date_view, end_date], rangeslider_visible=True, type='date')
-                fig.update_layout(height=500, template="plotly_dark", title=f"{asset} Full History (3-Year View)")
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # --- UI FIX: Indicator Breakdown Table ---
-                st.markdown("---")
-                st.subheader("🔎 Indicator Confluence Breakdown")
-                indicator_df = create_indicator_status_table(last_row)
-                st.dataframe(indicator_df, use_container_width=True, hide_index=True)
+            # Chart drawing logic 
+            fig = go.Figure()
+            fig.add_trace(go.Candlestick(x=df['timestamp'], open=df['open'], high=df['high'], low=df['low'], close=df['close'], name='Price'))
+            # ... (Rest of chart traces) ...
+            
+            # Set the initial view range to the last 3 years
+            end_date = datetime.now()
+            start_date_view = end_date - timedelta(days=1095) # 3 years
+            fig.update_xaxes(range=[start_date_view, end_date], rangeslider_visible=True, type='date')
+            fig.update_layout(height=500, template="plotly_dark", title=f"{asset} Full History (3-Year View)")
+            st.plotly_chart(fig, use_container_width=True)
 
-        except Exception as e:
-            st.error(f"Error loading analysis: {e}")
+            # --- Indicator Breakdown Table ---
+            st.markdown("---")
+            st.subheader("🔎 Indicator Confluence Breakdown")
+            indicator_df = create_indicator_status_table(last_row)
+            st.dataframe(indicator_df, use_container_width=True, hide_index=True)
+
+        # --- The CORRECTED EXCEPT BLOCK ---
+        except Exception as e: 
+            st.error(f"Error loading analysis. Reason: {e}")
+
+    # -------------------------------------------
+    # TAB 2: TRADINGVIEW WIDGET
+    # -------------------------------------------
+    
 
     with tab2:
         tv_symbol = f"KRAKEN:{asset.replace('/USDT', 'USD')}" # Adjusted symbol for Kraken in TradingView
