@@ -272,6 +272,10 @@ if st.session_state.selected_asset is None:
             st.markdown("---")
 
 else:
+    # --- FIX 1: Initialize df and historical data fetch ---
+    # This ensures 'df' is always available when the Technicals tab loads.
+    df = pd.DataFrame() 
+
     if st.button("⬅️ Back to Coinify Market"):
         st.session_state.selected_asset = None
         st.rerun()
@@ -279,77 +283,46 @@ else:
     st.header(f"{asset} Analysis")
     tab1, tab2 = st.tabs(["📊 Technicals", "🕯️ TradingView"])
     
-   # -------------------------------------------
-    # TAB 1: PYTHON ANALYZER (FINAL STRUCTURE FIX)
+    # --- FIX 2: Fetch data here, outside of the try block, so the variable is global ---
+    try:
+        df = fetch_history_cached(asset, DEFAULT_TIMEFRAME) 
+    except Exception as e:
+        # If the fetch fails, df remains an empty DataFrame, preventing the crash.
+        st.error(f"Failed to fetch historical data: {e}. Displaying limited view.")
+        
+    # -------------------------------------------
+    # TAB 1: PYTHON ANALYZER
     # -------------------------------------------
     with tab1:
-        # --- NEW FIX: Initialize df before the try block ---
-        df = pd.DataFrame() 
-        
-       
-        # Start the TRY block for the data loading
-        try:
-            with st.spinner("Loading History..."):
-                # 1. New Function Call: Now calculates 4 indicators
+        st.subheader(f"{asset} // Algorithmic Analysis")
+
+        # Now, only proceed with indicators/chart if the fetch was successful
+        if not df.empty:
+            
+            with st.spinner("Calculating Indicators..."):
+                # Calculate indicators and get the last row
                 df = add_indicators(df, BB_PERIOD, BB_STD) 
-                
-            last_row = df.iloc[-1]
             
-            # --- SIGNAL CONFLUENCE LOGIC ---
+            # The rest of your metrics and chart logic goes here...
             
-            # BB Buy: Price < Lower Band (Extreme Oversold)
-            bb_buy = last_row['close'] < last_row['lower']
-            # RSI Buy: RSI < 30 (Classic Oversold)
-            rsi_buy = last_row['RSI'] < 30
-            # MACD Buy: MACD Line is above Signal Line (Bullish momentum is building)
-            macd_buy = last_row['MACD'] > last_row['Signal']
-            # SMA Buy: Close price is above 200 SMA (Confirms the long-term trend is UP)
-            sma_buy = last_row['close'] > last_row['SMA200']
+            # --- Continue with your Metric, Signal, and Chart code here ---
+            # ... (The rest of your extensive tab1 code should follow here) ...
 
-            # Total Score for Buy Signal
-            buy_score = sum([bb_buy, rsi_buy, macd_buy, sma_buy])
-            
-            # Metrics
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Current Price", f"${last_row['close']:,.2f}")
-            m2.metric("All Time High", f"${df['high'].max():,.2f}") 
-            
-            # 2. Final Decision Block (Requires 3 out of 4 to agree)
-            if buy_score >= 3:
-                m3.metric("Bot Signal", "🔥 STRONG BUY", "High Confluence")
-            elif last_row['close'] > last_row['upper'] and last_row['RSI'] > 70:
-                m3.metric("Bot Signal", "🔴 SELL ZONE", "Overbought")
-            else:
-                m3.metric("Bot Signal", "💤 NEUTRAL", "Hold")
-
-            # Chart drawing logic 
-            fig = go.Figure()
-            fig.add_trace(go.Candlestick(x=df['timestamp'], open=df['open'], high=df['high'], low=df['low'], close=df['close'], name='Price'))
-            # ... (Rest of chart traces) ...
-            
-            # Set the initial view range to the last 3 years
-            end_date = datetime.now()
-            start_date_view = end_date - timedelta(days=1095) # 3 years
-            fig.update_xaxes(range=[start_date_view, end_date], rangeslider_visible=True, type='date')
-            fig.update_layout(height=500, template="plotly_dark", title=f"{asset} Full History (3-Year View)")
-            st.plotly_chart(fig, use_container_width=True)
-
-            # --- Indicator Breakdown Table ---
-            st.markdown("---")
-            st.subheader("🔎 Indicator Confluence Breakdown")
-            indicator_df = create_indicator_status_table(last_row)
-            st.dataframe(indicator_df, use_container_width=True, hide_index=True)
-
-        # --- The CORRECTED EXCEPT BLOCK ---
-        except Exception as e: 
-            st.error(f"Error loading analysis. Reason: {e}")
-
+        else:
+            st.warning("Historical chart data is unavailable.")
+    
+    # -------------------------------------------
+    # TAB 2: TRADINGVIEW WIDGET
+    # -------------------------------------------
+    with tab2:
+        # ... (TradingView code is correct and left here) ...
     # -------------------------------------------
     # TAB 2: TRADINGVIEW WIDGET
     # -------------------------------------------
     
 
-    with tab2:
+     
+     with tab2:
         tv_symbol = f"KRAKEN:{asset.replace('/USDT', 'USD')}" # Adjusted symbol for Kraken in TradingView
         components.html(f"""
         <div class="tradingview-widget-container" style="height:100%;width:100%">
