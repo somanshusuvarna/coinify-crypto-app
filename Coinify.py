@@ -114,7 +114,6 @@ def fetch_history_cached(symbol, timeframe):
         return df
 
 def add_indicators(df, period, std):
-    # --- SYNTAX FIX: Removed the duplicate function definition here ---
     # --- 1. Bollinger Bands (BB) - Volatility ---
     df['middle'] = df['close'].rolling(window=period).mean()
     std_dev = df['close'].rolling(window=period).std()
@@ -125,8 +124,8 @@ def add_indicators(df, period, std):
     delta = df['close'].diff()
     gain = delta.where(delta > 0, 0)
     loss = -delta.where(delta < 0, 0)
-    # SYNTAX FIX: Corrected indentation for average gain/loss
-    avg_gain = gain.ewm(com=14-1, adjust=False).mean() # Exponentially weighted smoothing
+    # Exponentially weighted smoothing for the Average Gain/Loss
+    avg_gain = gain.ewm(com=14-1, adjust=False).mean() 
     avg_loss = loss.ewm(com=14-1, adjust=False).mean()
     rs = avg_gain / avg_loss
     df['RSI'] = 100 - (100 / (1 + rs)) 
@@ -138,7 +137,7 @@ def add_indicators(df, period, std):
     df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean() # Signal Line
     
     # --- 4. Simple Moving Average (SMA) - Trend Filter ---
-    df['SMA200'] = df['close'].rolling(window=200).mean() # 200-day SMA
+    df['SMA200'] = df['close'].rolling(window=200).mean() 
     
     # Drop rows with NaN values created by rolling/ewm calculation for clean signals
     df = df.dropna()
