@@ -144,6 +144,54 @@ def add_indicators(df, period, std):
     # Drop rows with NaN values created by rolling/ewm calculation for clean signals
     df = df.dropna()
     return df
+def create_indicator_status_table(last_row):
+    """Creates a DataFrame showing the current status of each indicator."""
+    
+    # 1. Define the status for each indicator based on the last row of data
+    
+    # Bollinger Bands
+    if last_row['close'] < last_row['lower']:
+        bb_status = "Oversold (BUY)"
+    elif last_row['close'] > last_row['upper']:
+        bb_status = "Overbought (SELL)"
+    else:
+        bb_status = "Neutral"
+
+    # RSI
+    if last_row['RSI'] < 30:
+        rsi_status = "Oversold (BUY)"
+    elif last_row['RSI'] > 70:
+        rsi_status = "Overbought (SELL)"
+    else:
+        rsi_status = "Neutral"
+        
+    # MACD
+    if last_row['MACD'] > last_row['Signal']:
+        macd_status = "Bullish Cross (BUY)"
+    elif last_row['MACD'] < last_row['Signal']:
+        macd_status = "Bearish Cross (SELL)"
+    else:
+        macd_status = "Neutral"
+
+    # SMA200
+    if last_row['close'] > last_row['SMA200']:
+        sma_status = "Uptrend (BUY)"
+    else:
+        sma_status = "Downtrend (SELL)"
+        
+    # 2. Compile the status into a DataFrame
+    data = {
+        'Indicator': ['BBands', 'RSI', 'MACD', 'SMA200'],
+        'Value': [
+            f"Close vs. Lower: {last_row['lower']:.2f}",
+            f"{last_row['RSI']:.2f}",
+            f"MACD vs. Signal: {macd_status}",
+            f"Close vs. SMA200: {last_row['SMA200']:.2f}"
+        ],
+        'Signal': [bb_status, rsi_status, macd_status, sma_status]
+    }
+    
+    return pd.DataFrame(data)
 
 # -------------------------------------------
 # 3. APP NAVIGATION
@@ -280,13 +328,30 @@ else:
             fig.update_xaxes(range=[start_date_view, end_date], rangeslider_visible=True, type='date')
             fig.update_layout(height=500, template="plotly_dark", title=f"{asset} Full History (3-Year View)")
             st.plotly_chart(fig, use_container_width=True)
+            # Plotly chart drawing logic is here...
+        st.plotly_chart(fig, use_container_width=True)
+
+        # --- NEW CODE BLOCK BELOW THE CHART ---
+        st.markdown("---")
+        st.subheader("🔎 Indicator Confluence Breakdown")
+        
+        # Call the new function to get the analysis table
+        indicator_df = create_indicator_status_table(last_row)
+        
+        # Display the table using st.dataframe for an interactive view
+        st.dataframe(indicator_df, use_container_width=True, hide_index=True)
+        # --- END NEW CODE BLOCK ---
 
         except Exception as e:
-            st.error(f"Error loading chart: {e}") 
+    st.error(f"Error loading chart: {e}")
+
+        except Exception as e:
+    st.error(f"Error loading chart: {e}") 
     with tab2:
         tv_symbol = f"KRAKEN:{asset.replace('/USDT', 'USD')}" # Adjusted symbol for Kraken in TradingView
         components.html(f"""
         <div class="tradingview-widget-container" style="height:100%;width:100%">
+ 
           <div class="tradingview-widget-container__widget" style="height:calc(100% - 32px);width:100%"></div>
           <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
           {{"width": "100%", "height": "600", "symbol": "{tv_symbol}", "interval": "D", "timezone": "Etc/UTC", "theme": "dark", "style": "1", "locale": "en", "enable_publishing": false, "allow_symbol_change": true, "support_host": "https://www.tradingview.com"}}
