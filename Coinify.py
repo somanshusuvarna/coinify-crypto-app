@@ -43,13 +43,9 @@ def get_market_data():
                 "Logo": f"https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/128/color/{name.lower()}.png",
                 "Sparkline": f"https://www.coingecko.com/coins/{rank}/sparkline.svg"
             })
-        
             rank += 1
 
         return pd.DataFrame(data)
-        
-       
-      
 
     except:
         data = []
@@ -78,88 +74,43 @@ def get_market_data():
             rank += 1
 
         return pd.DataFrame(data)
-    def fetch_market_fundamentals(coin_name):
-     """Fetches fundamental market data (MCap, Volume, Supply) from a public API."""
-    
-    # We use a static dictionary to mock the data for stability, 
-    # as external APIs often require complex setup or API keys
-    
-    # NOTE: In a real production app, you would use requests.get() to a CoinGecko/CoinMarketCap API.
-    # For stability on Streamlit Cloud, we will use a refined random simulation.
-    
-    base_mcap = {
-        'BTC': 1_700_000_000_000, 
-        'ETH': 400_000_000_000, 
-        'XRP': 30_000_000_000,
-        'DOGE': 20_000_000_000,
-        'ADA': 15_000_000_000,
-        'AVAX': 12_000_000_000,
-        'SOL': 60_000_000_000,
-        'BNB': 80_000_000_000,
-    }.get(coin_name, 1_000_000_000) # Default for others
-
-    base_supply = {
-        'BTC': 19_500_000,
-        'ETH': 120_000_000,
-        'XRP': 55_000_000_000,
-        'DOGE': 140_000_000_000,
-    }.get(coin_name, 1_000_000_000)
-
-    # Use a small random fluctuation for a "live" feel
-    fluctuation = random.uniform(0.99, 1.01)
-    
-    return {
-        'MarketCap': base_mcap * fluctuation,
-        'FDV': base_mcap * 1.2 * fluctuation, # Fully Diluted Valuation (FDV)
-        'Volume_24h': base_mcap * 0.05 * fluctuation,
-        'Circulating_Supply': base_supply * fluctuation,
-        'Total_Supply': base_supply * 1.1,
-        'Max_Supply': base_supply * 1.5 if base_mcap > 50_000_000_000 else None 
-    }
 
 
 # -------------------------------------------------------
 # PRICE HISTORY
 # -------------------------------------------------------
 @st.cache_data(ttl=3600)
-def fetch_history_cached(symbol, timeframe):
-    # --- FIX: Ensure a DataFrame is ALWAYS returned ---
-    
+def fetch_history(symbol, timeframe):
     try:
-        exchange = ccxt.kraken({'enableRateLimit': True})
-        since_ms = exchange.parse8601('2017-01-01T00:00:00Z') 
-        
+        exchange = ccxt.kraken({"enableRateLimit": True})
+        kraken_symbol = symbol.replace("USDT", "USD")
+
+        since_ms = exchange.parse8601("2017-01-01T00:00:00Z")
         all_candles = []
+
         while True:
-            candles = exchange.fetch_ohlcv(symbol, timeframe, since=since_ms, limit=1000)
+            candles = exchange.fetch_ohlcv(kraken_symbol, timeframe, since=since_ms, limit=1000)
             if not candles:
                 break
-            
+
             all_candles.extend(candles)
             since_ms = candles[-1][0] + 1
-            
             if len(candles) < 1000:
                 break
-            time.sleep(0.1) 
-        
-        # 1. CRITICAL CHECK: If no data was fetched (empty list), return an empty DataFrame.
-        if not all_candles:
-            # Return an empty DataFrame with the expected column names
-            return pd.DataFrame(columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-            
-        df = pd.DataFrame(all_candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            time.sleep(0.1)
+
+        df = pd.DataFrame(all_candles, columns=["timestamp", "open", "high", "low", "close", "volume"])
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         return df
-    
-    except Exception as e:
-        # 2. FALLBACK: Return a dummy DataFrame with the correct columns to prevent crashing
-        dates = pd.date_range(end=datetime.now(), periods=200, freq='D')
-        df = pd.DataFrame({'timestamp': dates})
-        df['close'] = [60000 + (i * random.uniform(-50, 50)) for i in range(len(dates))]
-        df['open'] = df['close'] * random.uniform(0.99, 1.01)
-        df['high'] = df['close'] * 1.05
-        df['low'] = df['close'] * 0.95
-        # Ensure the fallback returns a DataFrame that can handle the iloc call
+
+    except:
+        dates = pd.date_range(end=datetime.now(), periods=200, freq="D")
+        df = pd.DataFrame({"timestamp": dates})
+        df["close"] = [60000 + (i * random.uniform(-50, 50)) for i in range(len(dates))]
+        df["open"] = df["close"] * random.uniform(0.99, 1.01)
+        df["high"] = df["close"] * 1.05
+        df["low"] = df["close"] * 0.95
+        df["volume"] = random.uniform(1e3, 1e6)
         return df
 
 
