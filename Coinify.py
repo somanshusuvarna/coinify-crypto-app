@@ -113,11 +113,36 @@ def fetch_history_cached(symbol, timeframe):
         df['low'] = df['close'] * 0.95
         return df
 
-def calculate_bands(df, period, std):
-    df['middle'] = df['close'].rolling(window=period).mean()
+def add_indicators(df, period, std):
+    def add_indicators(df, period, std):
+    # --- 1. Bollinger Bands (BB) - Volatility ---
+     df['middle'] = df['close'].rolling(window=period).mean()
     std_dev = df['close'].rolling(window=period).std()
     df['upper'] = df['middle'] + (std_dev * std)
     df['lower'] = df['middle'] - (std_dev * std)
+
+    # --- 2. Relative Strength Index (RSI) - Momentum ---
+    # Calculates the 14-period RSI
+    delta = df['close'].diff()
+    gain = delta.where(delta > 0, 0)
+    loss = -delta.where(delta < 0, 0)
+    avg_gain = gain.ewm(com=14-1, adjust=False).mean() # Exponentially weighted smoothing
+    avg_loss = loss.ewm(com=14-1, adjust=False).mean()
+    rs = avg_gain / avg_loss
+    df['RSI'] = 100 - (100 / (1 + rs)) # RSI calculation
+    
+    # --- 3. MACD - Trend Following Momentum ---
+    # MACD standard settings: 12 (fast), 26 (slow), 9 (signal)
+    df['EMA12'] = df['close'].ewm(span=12, adjust=False).mean()
+    df['EMA26'] = df['close'].ewm(span=26, adjust=False).mean()
+    df['MACD'] = df['EMA12'] - df['EMA26'] # MACD Line
+    df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean() # Signal Line
+    
+    # --- 4. Simple Moving Average (SMA) - Trend Filter ---
+    df['SMA200'] = df['close'].rolling(window=200).mean() # 200-day SMA
+    
+    # Drop rows with NaN values created by rolling/ewm calculation for clean signals
+    df = df.dropna()
     return df
 
 # -------------------------------------------
@@ -208,27 +233,41 @@ else:
     tab1, tab2 = st.tabs(["📊 Technicals", "🕯️ TradingView"])
   # --- TAB 1: PYTHON ANALYZER (FINAL OPTIMIZED CHART) ---
     with tab1:
-        st.subheader(f"{asset} // Algorithmic Analysis")
-        try:
-            with st.spinner(f'Crunching {asset} data...'):
-                # This fetches ALL available data (since ~2017)
-                df = fetch_history_cached(asset, DEFAULT_TIMEFRAME)
-                df = calculate_bands(df, BB_PERIOD, BB_STD)
-
-            # CRITICAL FIX: Set Default View to Last 3 Years for clear scaling
-            end_date = datetime.now()
-            start_date_view = end_date - timedelta(days=1095) # 3 years
-            
+       # Loading historical data (now filtered to 1 year max in function)
+        with st.spinner("Loading History..."):
+            # 1. NEW FUNCTION CALL: Now calculates 4 indicators
+            df = add_indicators(df, BB_PERIOD, BB_STD) 
             last_row = df.iloc[-1]
+            
+            # --- SIGNAL CONFLUENCE LOGIC ---
+            
+            # BB Buy: Price < Lower Band (Extreme Oversold)
+            bb_buy = last_row['close'] < last_row['lower']
+            # RSI Buy: RSI < 30 (Classic Oversold)
+            rsi_buy = last_row['RSI'] < 30
+            # MACD Buy: MACD Line is above Signal Line (Bullish momentum is building)
+            macd_buy = last_row['MACD'] > last_row['Signal']
+            # SMA Buy: Close price is above 200 SMA (Confirms the long-term trend is UP)
+            sma_buy = last_row['close'] > last_row['SMA200']
+
+            # Total Score for Buy Signal
+            buy_score = sum([bb_buy, rsi_buy, macd_buy, sma_buy])
             
             # Metrics
             m1, m2, m3 = st.columns(3)
             m1.metric("Current Price", f"${last_row['close']:,.2f}")
             m2.metric("All Time High", f"${df['high'].max():,.2f}") 
-            if last_row['close'] < last_row['lower']:
-                m3.metric("Bot Signal", "🟢 BUY ZONE", "Oversold")
+            
+            # 2. NEW DECISION BLOCK (Requires 3 out of 4 to agree)
+            if buy_score >= 3:
+                m3.metric("Bot Signal", "🔥 STRONG BUY", "High Confluence")
+            elif last_row['close'] > last_row['upper'] and last_row['RSI'] > 70:
+                # Less strict SELL signal (BB + RSI Overbought)
+                m3.metric("Bot Signal", "🔴 SELL ZONE", "Overbought")
             else:
                 m3.metric("Bot Signal", "💤 NEUTRAL", "Hold")
+            
+            # Chart drawing logic follows here...
 
             # Plotly Chart (Uses full DF but sets initial zoom range)
             fig = go.Figure()
