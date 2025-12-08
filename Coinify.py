@@ -5,7 +5,6 @@ import pandas as pd
 import plotly.graph_objects as go
 import time
 import random
-from pycoingecko import CoinGeckoAPI
 from datetime import datetime, timedelta
 
 # -------------------------------------------------------
@@ -178,41 +177,6 @@ def create_indicator_status_table(last):
         "Signal": [bb, rsi, macd, sma]
     })
 
-@st.cache_data(ttl=120)
-def get_tokenomics(symbol):
-    cg = CoinGeckoAPI()
-
-    # Convert “BTC/USDT” → “bitcoin”
-    mapping = {
-        "BTC": "bitcoin",
-        "ETH": "ethereum",
-        "SOL": "solana",
-        "BNB": "binancecoin",
-        "XRP": "ripple",
-        "DOGE": "dogecoin",
-        "ADA": "cardano",
-        "AVAX": "avalanche-2"
-    }
-
-    base = symbol.split("/")[0]
-    coin_id = mapping.get(base, None)
-
-    if coin_id is None:
-        return None
-
-    data = cg.get_coin_by_id(coin_id)
-
-    market = data["market_data"]
-
-    return {
-        "Market Cap": market["market_cap"]["usd"],
-        "FDV": market["fully_diluted_valuation"]["usd"],
-        "24h Volume": market["total_volume"]["usd"],
-        "Circulating Supply": market["circulating_supply"],
-        "Total Supply": market["total_supply"],
-        "Max Supply": market["max_supply"]
-    }
-
 
 # -------------------------------------------------------
 # MAIN UI
@@ -354,30 +318,8 @@ else:
 
             st.dataframe(create_indicator_status_table(last), use_container_width=True, hide_index=True)
 
-
-
         except Exception as e:
             st.error(f"Error loading chart: {e}")
-        # ----------------------------
-# TOKENOMICS SECTION (NEW)
-# ----------------------------
-st.markdown("### 🪙 Tokenomics Overview")
-
-tokenomics = get_tokenomics(asset)
-
-if tokenomics:
-    t1, t2, t3 = st.columns(3)
-    t1.metric("Market Cap", f"${tokenomics['Market Cap']:,.0f}")
-    t2.metric("FDV", f"${tokenomics['FDV']:,.0f}")
-    t3.metric("24h Volume", f"${tokenomics['24h Volume']:,.0f}")
-
-    t4, t5, t6 = st.columns(3)
-    t4.metric("Circulating Supply", f"{tokenomics['Circulating Supply']:,.0f}")
-    t5.metric("Total Supply", f"{tokenomics['Total Supply']:,.0f}")
-    t6.metric("Max Supply", f"{tokenomics['Max Supply']:,.0f}")
-else:
-    st.warning("Tokenomics not available for this asset.")
-    
 
     # ---------------------------------------------------
     # TAB 2 – TradingView Widget
